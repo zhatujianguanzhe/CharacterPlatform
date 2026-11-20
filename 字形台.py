@@ -1,4 +1,4 @@
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 # coding=utf-8
 """字形台 - 只读字体预览.
 
@@ -1174,15 +1174,36 @@ def main():
         state["nav_index"] = len(state["nav_history"]) - 1
 
     def push_search_history(text):
+        """历史只保留字码点 ($XXXX),不记字形名."""
         text = (text or "").strip()
         if not text:
             return
-        hist = state["search_history"]
+        # 统一成 $HEX
+        raw = text[1:] if text.startswith("$") else text
+        try:
+            cp = int(raw, 16)
+            if cp < 0 or cp > 0x10FFFF:
+                return
+            text = fmt_cp(cp)
+        except Exception:
+            return  # 非字码点不入历史
+        try:
+            hist = state["search_history"]
+        except Exception:
+            hist = []
         if text in hist:
             hist.remove(text)
         hist.insert(0, text)
-        state["search_history"] = hist[:30]
-        search_combo.values = list(state["search_history"])
+        # 去重后只留字码点
+        cleaned = []
+        for h in hist:
+            if h not in cleaned:
+                cleaned.append(h)
+        state["search_history"] = cleaned[:30]
+        try:
+            search_combo.values = list(state["search_history"])
+        except Exception:
+            pass
 
     # y=20: 后退/前进 (间距0) | 文件框 | 搜索
     btn_back = icon_button(nav_bar, "\uE72B", nav_back, "后退")
@@ -2347,8 +2368,7 @@ def main():
                 pass
             state["_detail_win"] = None
 
-        # 双击查看记入搜索历史 (名称 + 首码点)
-        push_search_history(glyph.get("name") or "")
+        # 双击查看:历史只记首字码点
         if glyph.get("unicodes"):
             push_search_history(fmt_cp(glyph["unicodes"][0]))
         win = tk.Toplevel(root)
